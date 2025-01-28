@@ -8,6 +8,12 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 10000;
 
+// Certifique-se de que o diretório 'public' existe
+const publicDir = path.join(__dirname, 'public');
+if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir);
+}
+
 // Cliente com armazenamento local para manter a sessão
 const client = new Client({
     authStrategy: new LocalAuth({
@@ -39,7 +45,7 @@ client.on('qr', (qr) => {
         qrcode.generate(qr, { small: true });
 
         // Salvar o QR Code como arquivo de imagem PNG
-        QRCode.toFile('qrcode.png', qr, (err) => {
+        QRCode.toFile(path.join(publicDir, 'qrcode.png'), qr, (err) => {
             if (err) {
                 console.error('Erro ao salvar o QR Code:', err);
             } else {
@@ -355,14 +361,14 @@ client.on('message', async msg => {
 });
 
 // Servir a imagem do QR Code
-app.use(express.static(__dirname));
+app.use('/public', express.static(publicDir));
 
 // Rota para acessar o QR Code
 app.get('/qrcode.png', (req, res) => {
-    res.sendFile(path.join(__dirname, 'qrcode.png'));
+    res.sendFile(path.join(publicDir, 'qrcode.png'));
 });
 
-// Rota raiz para exibir uma mensagem
+// Rota principal para status do servidor
 app.get('/', (req, res) => {
     res.send('Servidor ativo! Acesse /qrcode.png para visualizar o QR Code.');
 });
