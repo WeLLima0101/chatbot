@@ -129,7 +129,8 @@ client.on('message', async msg => {
     const chat = await msg.getChat();
 
     // Menu inicial
-    if (msg.body.match(/(menu|Menu|início|Inicio|Oi|oi|Olá|olá|ola|Ola)/i) && msg.from.endsWith('@c.us')) {
+    if (msg.body.match(/(menu|Menu|início|Inicio|Oi|oi|Olá|olá|ola|Ola)/i)) {
+        clientStates.delete(msg.from); // Reseta o estado do cliente
         await delay(3000);
         await chat.sendStateTyping();
         await delay(3000);
@@ -151,7 +152,7 @@ client.on('message', async msg => {
     }
 
     // Item 1: Conhecer nossos serviços
-    if (msg.body === '1' && msg.from.endsWith('@c.us')) {
+    if (msg.body === '1') {
         await delay(3000);
         await chat.sendStateTyping();
         await delay(3000);
@@ -171,191 +172,90 @@ client.on('message', async msg => {
         return;
     }
 
-    // Item 2: Solicitar orçamento
-    if (msg.body === '2' && msg.from.endsWith('@c.us')) {
-        clientStates.set(msg.from, { state: 'awaiting_project' });
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
-
-        await client.sendMessage(msg.from, 'Por favor, descreva brevemente o projeto para o qual deseja solicitar orçamento.');
-        return;
-    }
-
-    if (clientStates.get(msg.from)?.state === 'awaiting_project') {
-        clientStates.get(msg.from).project = msg.body;
-        clientStates.get(msg.from).state = 'awaiting_street';
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
-
-        await client.sendMessage(msg.from, 'Ótimo! Agora, por favor, informe o nome da rua onde o serviço será realizado.');
-        return;
-    }
-
-    if (clientStates.get(msg.from)?.state === 'awaiting_street') {
-        clientStates.get(msg.from).street = msg.body;
-        clientStates.get(msg.from).state = 'awaiting_number';
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
-
-        await client.sendMessage(msg.from, 'Por favor, informe o número do imóvel.');
-        return;
-    }
-
-    if (clientStates.get(msg.from)?.state === 'awaiting_number') {
-        clientStates.get(msg.from).number = msg.body;
-        clientStates.get(msg.from).state = 'awaiting_neighborhood';
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
-
-        await client.sendMessage(msg.from, 'Agora, informe o bairro.');
-        return;
-    }
-
-    if (clientStates.get(msg.from)?.state === 'awaiting_neighborhood') {
-        clientStates.get(msg.from).neighborhood = msg.body;
-        clientStates.get(msg.from).state = 'awaiting_city';
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
-
-        await client.sendMessage(msg.from, 'Por fim, informe a cidade onde o serviço será realizado.');
-        return;
-    }
-
-    if (clientStates.get(msg.from)?.state === 'awaiting_city') {
-        clientStates.get(msg.from).city = msg.body;
-        clientStates.get(msg.from).state = 'awaiting_email';
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
-
-        await client.sendMessage(msg.from, 'Agora, por favor, informe um e-mail para contato e envio do orçamento.');
-        return;
-    }
-
-    if (clientStates.get(msg.from)?.state === 'awaiting_email') {
-        const data = clientStates.get(msg.from);
-        data.email = msg.body;
-        clientStates.delete(msg.from);
-
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
-
-        await client.sendMessage(msg.from, 'Obrigado! Suas informações foram enviadas para nosso setor de orçamentos. Em breve, um responsável entrará em contato.');
-
-        // Salvar no CSV
-        saveToCSV({
-            project: data.project,
-            street: data.street,
-            number: data.number,
-            neighborhood: data.neighborhood,
-            city: data.city,
-            email: data.email
-        });
-
-        const responsibleNumber = '551140150044@c.us';
-        await client.sendMessage(
-            responsibleNumber,
-            `📢 *Nova Solicitação de Orçamento!*\n\n` +
-            `📝 *Projeto*: ${data.project}\n` +
-            `📍 *Rua*: ${data.street}\n` +
-            `🔢 *Número*: ${data.number}\n` +
-            `🏘️ *Bairro*: ${data.neighborhood}\n` +
-            `🌆 *Cidade*: ${data.city}\n` +
-            `📧 *E-mail*: ${data.email}\n` +
-            `👤 *Solicitado por*: ${msg.from}\n\n` +
-            `🚀 Por favor, entre em contato com o cliente para fornecer mais detalhes ou confirmar o orçamento!`
-        );
-
-        await client.sendMessage(msg.from, 'Para voltar ao menu inicial, digite *menu*.');
-        return;
-    }
-
-    // Item 3: Falar com um atendente
-    if (msg.body === '3' && msg.from.endsWith('@c.us')) {
-        try {
-            await delay(3000);
-            await chat.sendStateTyping(); // Simula digitação
-            await delay(3000);
-
-            await client.sendMessage(
-                msg.from,
-                '✅ *Solicitação registrada!* Estamos avisando um responsável para falar com você. Por favor, aguarde um momento.'
-            );
-
-            const responsibleNumber = '551140150044@c.us'; // Substitua pelo número correto
-            await client.sendMessage(
-                responsibleNumber,
-                `📢 *Nova Solicitação!*\n\n👤 Um cliente deseja falar com um responsável.\n` +
-                `📱 *Número do Cliente*: ${msg.from}\n\n` +
-                `🚀 Por favor, entre em contato o mais breve possível!`
-            );
-
-            await delay(3000);
-            await client.sendMessage(
-                msg.from,
-                '💬 Enquanto isso, se precisar, você pode voltar ao menu inicial digitando *menu*.'
-            );
-        } catch (error) {
-            console.error('Erro ao processar o item 3:', error);
-            await client.sendMessage(
-                msg.from,
-                '⚠️ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde ou entre em contato diretamente conosco.'
-            );
+    // Controle de estados
+    const state = clientStates.get(msg.from);
+    if (state) {
+        switch (state.state) {
+            case 'awaiting_project':
+                state.project = msg.body;
+                state.state = 'awaiting_street';
+                await client.sendMessage(msg.from, 'Ótimo! Agora, por favor, informe o nome da rua onde o serviço será realizado.');
+                break;
+            case 'awaiting_street':
+                state.street = msg.body;
+                state.state = 'awaiting_number';
+                await client.sendMessage(msg.from, 'Por favor, informe o número do imóvel.');
+                break;
+            case 'awaiting_number':
+                state.number = msg.body;
+                state.state = 'awaiting_neighborhood';
+                await client.sendMessage(msg.from, 'Agora, informe o bairro.');
+                break;
+            case 'awaiting_neighborhood':
+                state.neighborhood = msg.body;
+                state.state = 'awaiting_city';
+                await client.sendMessage(msg.from, 'Por fim, informe a cidade onde o serviço será realizado.');
+                break;
+            case 'awaiting_city':
+                state.city = msg.body;
+                state.state = 'awaiting_email';
+                await client.sendMessage(msg.from, 'Agora, por favor, informe um e-mail para contato e envio do orçamento.');
+                break;
+            case 'awaiting_email':
+                state.email = msg.body;
+                saveToCSV(state);
+                await client.sendMessage(msg.from, 'Obrigado! Suas informações foram enviadas para nosso setor de orçamentos. Em breve, um responsável entrará em contato.');
+                clientStates.delete(msg.from);
+                break;
         }
         return;
     }
 
-    // Item 4: Nossos contatos
-    if (msg.body === '4' && msg.from.endsWith('@c.us')) {
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
+    // Item 2: Solicitar orçamento
+    if (msg.body === '2') {
+        clientStates.set(msg.from, { state: 'awaiting_project' });
+        await client.sendMessage(msg.from, 'Por favor, descreva brevemente o projeto para o qual deseja solicitar orçamento.');
+        return;
+    }
+
+    // Item 3: Falar com um atendente
+    if (msg.body === '3') {
         await client.sendMessage(
             msg.from,
-            '📞 *Nossos Contatos*:\n\n' +
-            '📱 *WhatsApp*: (11) 95449-3758\n' +
-            '📞 *Telefone*: (11) 4401-3402\n' +
-            '🌐 *Site*: https://statusserv.com.br\n\n' +
-            'Estamos à disposição para ajudá-lo(a)!'
+            '✅ *Solicitação registrada!* Estamos avisando um responsável para falar com você. Por favor, aguarde um momento.'
         );
+        await client.sendMessage(
+            adminNumber,
+            `📢 *Nova Solicitação!*\n👤 Um cliente deseja falar com um responsável.\n📱 *Número do Cliente*: ${msg.from}\n🚀 Por favor, entre em contato o mais breve possível!`
+        );
+        return;
+    }
 
-        await client.sendMessage(msg.from, 'Para voltar ao menu inicial, digite *menu*.');
+    // Item 4: Nossos contatos
+    if (msg.body === '4') {
+        await client.sendMessage(
+            msg.from,
+            '📞 *Nossos Contatos*:\n📱 *WhatsApp*: (11) 95449-3758\n📞 *Telefone*: (11) 4401-3402\n🌐 *Site*: https://statusserv.com.br\nEstamos à disposição para ajudá-lo(a)!'
+        );
         return;
     }
 
     // Item 5: Outras dúvidas
-    if (msg.body === '5' && msg.from.endsWith('@c.us')) {
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
+    if (msg.body === '5') {
         await client.sendMessage(
             msg.from,
-            '❓ *Outras Dúvidas*:\n\n' +
-            'Se precisar de mais informações, acesse nosso site ou entre em contato conosco. Estamos sempre prontos para ajudar!\n\n' +
-            '🌐 *Site*: https://statusserv.com.br'
+            '❓ *Outras Dúvidas*:\nSe precisar de mais informações, acesse nosso site ou entre em contato conosco. Estamos sempre prontos para ajudar!\n🌐 *Site*: https://statusserv.com.br'
         );
-
-        await client.sendMessage(msg.from, 'Para voltar ao menu inicial, digite *menu*.');
         return;
     }
 
     // Item 6: Encerrar conversa
-    if (msg.body === '6' && msg.from.endsWith('@c.us')) {
-        await delay(3000);
-        await chat.sendStateTyping();
-        await delay(3000);
+    if (msg.body === '6') {
         await client.sendMessage(
             msg.from,
-            '🔒 *Conversa encerrada.*\n\n' +
-            'Foi um prazer atender você! Caso precise de mais informações ou deseje retomar a conversa, basta enviar *menu* ou qualquer mensagem que estaremos prontos para ajudar. 😊'
+            '🔒 *Conversa encerrada.*\nFoi um prazer atender você! Caso precise de mais informações ou deseje retomar a conversa, basta enviar *menu* ou qualquer mensagem que estaremos prontos para ajudar. 😊'
         );
-        clientStates.delete(msg.from); // Limpa o estado do cliente, se existir
+        clientStates.delete(msg.from);
         return;
     }
 });
