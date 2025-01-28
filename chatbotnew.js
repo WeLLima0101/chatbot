@@ -272,6 +272,17 @@ app.get('/qrcode.png', (req, res) => {
     res.sendFile(path.join(publicDir, 'qrcode.png'));
 });
 
+// Rota para baixar o arquivo CSV
+app.get('/download-csv', (req, res) => {
+    const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
+    res.download(filePath, 'solicitacoes.csv', (err) => {
+        if (err) {
+            console.error('Erro ao enviar o arquivo CSV para download:', err.message);
+            res.status(500).send('Erro ao enviar o arquivo CSV.');
+        }
+    });
+});
+
 // Rota principal para status do servidor
 app.get('/', (req, res) => {
     res.send('Servidor ativo! Acesse /qrcode.png para visualizar o QR Code.');
