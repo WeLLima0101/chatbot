@@ -1,8 +1,12 @@
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const express = require('express');
+const app = express();
 const fs = require('fs');
 const path = require('path');
+
+const PORT = process.env.PORT || 3000;
 
 // Cliente com armazenamento local para manter a sessão
 const client = new Client({
@@ -32,14 +36,14 @@ if (fs.existsSync(sessionPath)) {
 client.on('qr', (qr) => {
     if (!isClientInitialized) {
         console.log('QR Code gerado! Escaneie o código abaixo para autenticar:');
-        qrcode.generate(qr, { small: false }); // QR Code grande e mais legível
+        qrcode.generate(qr, { small: true });
 
         // Salvar o QR Code como arquivo de imagem PNG
         QRCode.toFile('qrcode.png', qr, (err) => {
             if (err) {
                 console.error('Erro ao salvar o QR Code:', err);
             } else {
-                console.log('QR Code salvo como "qrcode.png". Faça o download e escaneie.');
+                console.log('QR Code salvo como "qrcode.png". Acesse pelo servidor para escanear.');
             }
         });
     }
@@ -348,4 +352,10 @@ client.on('message', async msg => {
         clientStates.delete(msg.from); // Limpa o estado do cliente, se existir
         return;
     }
+});
+
+// Servidor HTTP para servir QR Code
+app.use(express.static(__dirname));
+app.listen(PORT, () => {
+    console.log(`Servidor HTTP rodando na porta ${PORT}. Acesse o QR Code em http://localhost:${PORT}/qrcode.png`);
 });
