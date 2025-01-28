@@ -95,12 +95,13 @@ const clientStates = new Map();
 // Número do administrador (substitua pelo número correto no formato internacional)
 const adminNumber = '551140150044@c.us';
 
-// Função para salvar dados no arquivo CSV (atualizada)
+// Função para salvar dados no arquivo CSV
 const saveToCSV = (data) => {
     const filePath = path.join(__dirname, 'solicitacoes.csv');
 
     try {
-        console.log('Tentando salvar os dados no CSV:', data); // Log para debug
+        console.log(`Tentando salvar os dados no CSV no caminho: ${filePath}`); // Log detalhado do caminho
+
         // Verifica se o arquivo já existe
         const fileExists = fs.existsSync(filePath);
 
@@ -125,20 +126,9 @@ const saveToCSV = (data) => {
     }
 };
 
-// Teste inicial para verificar se o arquivo CSV pode ser criado
-console.log('Realizando teste inicial de escrita no arquivo CSV...');
-saveToCSV({
-    project: 'Teste Projeto',
-    street: 'Rua de Teste',
-    number: '123',
-    neighborhood: 'Bairro de Teste',
-    city: 'Cidade de Teste',
-    email: 'teste@email.com'
-});
-
-
 // Funil
 client.on('message', async msg => {
+    console.log(`Mensagem recebida de ${msg.from}: ${msg.body}`); // Log detalhado da mensagem recebida
     const chat = await msg.getChat();
 
     // Menu inicial
@@ -188,6 +178,7 @@ client.on('message', async msg => {
     // Controle de estados
     const state = clientStates.get(msg.from);
     if (state) {
+        console.log(`Estado atual para ${msg.from}:`, state); // Log do estado atual do cliente
         switch (state.state) {
             case 'awaiting_project':
                 state.project = msg.body;
