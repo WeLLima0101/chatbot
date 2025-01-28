@@ -121,7 +121,8 @@ const saveToCSV = (data) => {
             adminNumber,
             `⚠️ Erro ao salvar os dados no CSV: ${err.message}. Verifique o arquivo ou o código.`
         );
-    }
+    };
+
 };
 
 // Funil
