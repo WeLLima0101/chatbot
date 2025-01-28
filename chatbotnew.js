@@ -95,11 +95,12 @@ const clientStates = new Map();
 // Número do administrador (substitua pelo número correto no formato internacional)
 const adminNumber = '551140150044@c.us';
 
-// Função para salvar dados no arquivo CSV
+// Função para salvar dados no arquivo CSV (atualizada)
 const saveToCSV = (data) => {
     const filePath = path.join(__dirname, 'solicitacoes.csv');
 
     try {
+        console.log('Tentando salvar os dados no CSV:', data); // Log para debug
         // Verifica se o arquivo já existe
         const fileExists = fs.existsSync(filePath);
 
@@ -121,9 +122,20 @@ const saveToCSV = (data) => {
             adminNumber,
             `⚠️ Erro ao salvar os dados no CSV: ${err.message}. Verifique o arquivo ou o código.`
         );
-    };
-
+    }
 };
+
+// Teste inicial para verificar se o arquivo CSV pode ser criado
+console.log('Realizando teste inicial de escrita no arquivo CSV...');
+saveToCSV({
+    project: 'Teste Projeto',
+    street: 'Rua de Teste',
+    number: '123',
+    neighborhood: 'Bairro de Teste',
+    city: 'Cidade de Teste',
+    email: 'teste@email.com'
+});
+
 
 // Funil
 client.on('message', async msg => {
