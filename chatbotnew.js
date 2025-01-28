@@ -97,7 +97,7 @@ const adminNumber = '551140150044@c.us';
 
 // Função para salvar dados no arquivo CSV
 const saveToCSV = (data) => {
-    const filePath = path.join(publicDir, 'solicitacoes.csv');
+    const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
 
     try {
         console.log(`Tentando salvar os dados no CSV no caminho: ${filePath}`); // Log detalhado do caminho
