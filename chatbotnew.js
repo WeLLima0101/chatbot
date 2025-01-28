@@ -362,6 +362,11 @@ app.get('/qrcode.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'qrcode.png'));
 });
 
+// Rota raiz para exibir uma mensagem
+app.get('/', (req, res) => {
+    res.send('Servidor ativo! Acesse /qrcode.png para visualizar o QR Code.');
+});
+
 // Iniciar o servidor
 app.listen(port, '0.0.0.0', () => {
     console.log(`Servidor rodando em http://0.0.0.0:${port}`);
