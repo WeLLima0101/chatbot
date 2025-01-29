@@ -209,6 +209,19 @@ client.on('message', async msg => {
                 state.email = msg.body;
                 saveToCSV(state);
                 await client.sendMessage(msg.from, 'Obrigado! Suas informações foram enviadas para nosso setor de orçamentos. Em breve, um responsável entrará em contato.');
+
+                // Notificação ao administrador
+                await client.sendMessage(
+                    '551140150044@c.us',
+                    `📢 *Nova Solicitação de Orçamento!*\n\n` +
+                    `📝 *Projeto*: ${state.project}\n` +
+                    `📍 *Rua*: ${state.street}\n` +
+                    `🔢 *Número*: ${state.number}\n` +
+                    `🏘️ *Bairro*: ${state.neighborhood}\n` +
+                    `🌆 *Cidade*: ${state.city}\n` +
+                    `📧 *E-mail*: ${state.email}\n\n` +
+                    `🚀 Por favor, entre em contato com o cliente para fornecer mais detalhes ou confirmar o orçamento!`
+                );
                 clientStates.delete(msg.from);
                 break;
         }
@@ -229,8 +242,10 @@ client.on('message', async msg => {
             '✅ *Solicitação registrada!* Estamos avisando um responsável para falar com você. Por favor, aguarde um momento.'
         );
         await client.sendMessage(
-            adminNumber,
-            `📢 *Nova Solicitação!*\n👤 Um cliente deseja falar com um responsável.\n📱 *Número do Cliente*: ${msg.from}\n🚀 Por favor, entre em contato o mais breve possível!`
+            '551140150044@c.us',
+            `📢 *Nova Solicitação!*\n\n👤 Um cliente deseja falar com um responsável.\n` +
+            `📱 *Número do Cliente*: ${msg.from}\n\n` +
+            `🚀 Por favor, entre em contato o mais breve possível!`
         );
         return;
     }
