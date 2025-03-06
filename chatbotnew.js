@@ -110,13 +110,28 @@ const saveToCSV = (data) => {
         const newLine = `${data.project};${data.street};${data.number};${data.neighborhood};${data.city};${data.email};${new Date().toLocaleString()}\n`;
 
         // Se o arquivo não existe, cria com o cabeçalho; caso contrário, apenas adiciona uma nova linha
-        if (!fileExists) {
-            fs.writeFileSync(filePath, header + newLine, { encoding: 'utf8' });
-            console.log('Arquivo CSV criado e dados salvos com sucesso!');
-        } else {
-            fs.appendFileSync(filePath, newLine, { encoding: 'utf8' });
-            console.log('Dados adicionados ao arquivo CSV com sucesso!');
-        }
+        const saveToCSV = (data) => {
+            const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
+        
+            try {
+                console.log(`Sobrescrevendo o arquivo CSV no caminho: ${filePath}`); // Log do caminho
+        
+                // Define o cabeçalho e os dados a serem salvos
+                const header = 'Projeto;Rua;Número;Bairro;Cidade;Email;Data/Hora\n';
+                const newLine = `${data.project};${data.street};${data.number};${data.neighborhood};${data.city};${data.email};${new Date().toLocaleString()}\n`;
+        
+                // Sempre sobrescreve o arquivo com os novos dados
+                fs.writeFileSync(filePath, header + newLine, { encoding: 'utf8' });
+                console.log('Arquivo CSV sobrescrito com sucesso!');
+            } catch (err) {
+                console.error('Erro ao sobrescrever o CSV:', err.message);
+                client.sendMessage(
+                    adminNumber,
+                    `⚠️ Erro ao sobrescrever o CSV: ${err.message}. Verifique o arquivo ou o código.`
+                );
+            }
+        };
+        
     } catch (err) {
         console.error('Erro ao salvar no CSV:', err.message);
         client.sendMessage(
