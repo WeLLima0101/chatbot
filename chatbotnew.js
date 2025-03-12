@@ -4,6 +4,7 @@ const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis');
 
 const app = express();
 const port = process.env.PORT || 10000;
@@ -73,8 +74,6 @@ client.on('auth_failure', (msg) => {
 // Tratamento de desconexão
 client.on('disconnected', (reason) => {
     console.log('Cliente desconectado. Motivo:', reason);
-
-    // Tenta reiniciar o cliente automaticamente
     console.log('Tentando reconectar...');
     client.destroy().then(() => {
         client.initialize();
@@ -95,43 +94,51 @@ const clientStates = new Map();
 // Número do administrador (substitua pelo número correto no formato internacional)
 const adminNumber = '551140150044@c.us';
 
-// Função para salvar dados no arquivo CSV
-const saveToCSV = (data) => {
+// Configuração do Google Drive
+const auth = new google.auth.GoogleAuth({
+    keyFile: 'credentials.json',
+    scopes: ['https://www.googleapis.com/auth/drive']
+});
+const drive = google.drive({ version: 'v3', auth });
+
+const uploadFileToDrive = async () => {
     const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
+    const folderId = '1Q55EziaXR-Q9Raq1e7lfdC5I7-mkYSgs'; // Substitua pelo ID da sua pasta no Google Drive
 
     try {
-        console.log(`Tentando salvar os dados no CSV no caminho: ${filePath}`); // Log detalhado do caminho
+        const response = await drive.files.create({
+            requestBody: {
+                name: 'solicitacoes.csv',
+                mimeType: 'text/csv',
+                parents: [folderId]
+            },
+            media: {
+                mimeType: 'text/csv',
+                body: fs.createReadStream(filePath)
+            }
+        });
+        console.log('✅ Arquivo enviado para o Google Drive:', response.data.id);
+    } catch (error) {
+        console.error('❌ Erro ao enviar para o Google Drive:', error.message);
+    }
+};
 
-        // Verifica se o arquivo já existe
-        const fileExists = fs.existsSync(filePath);
-
-        // Define o cabeçalho e os dados a serem salvos
+// Função para salvar dados no arquivo CSV e enviá-lo para o Google Drive
+const saveToCSV = (data) => {
+    const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
+    try {
+        console.log(`Tentando salvar os dados no CSV no caminho: ${filePath}`);
         const header = 'Projeto;Rua;Número;Bairro;Cidade;Email;Data/Hora\n';
         const newLine = `${data.project};${data.street};${data.number};${data.neighborhood};${data.city};${data.email};${new Date().toLocaleString()}\n`;
 
-        // Se o arquivo não existe, cria com o cabeçalho; caso contrário, apenas adiciona uma nova linha
-        const saveToCSV = (data) => {
-            const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
-        
-            try {
-                console.log(`Sobrescrevendo o arquivo CSV no caminho: ${filePath}`); // Log do caminho
-        
-                // Define o cabeçalho e os dados a serem salvos
-                const header = 'Projeto;Rua;Número;Bairro;Cidade;Email;Data/Hora\n';
-                const newLine = `${data.project};${data.street};${data.number};${data.neighborhood};${data.city};${data.email};${new Date().toLocaleString()}\n`;
-        
-                // Sempre sobrescreve o arquivo com os novos dados
-                fs.writeFileSync(filePath, header + newLine, { encoding: 'utf8' });
-                console.log('Arquivo CSV sobrescrito com sucesso!');
-            } catch (err) {
-                console.error('Erro ao sobrescrever o CSV:', err.message);
-                client.sendMessage(
-                    adminNumber,
-                    `⚠️ Erro ao sobrescrever o CSV: ${err.message}. Verifique o arquivo ou o código.`
-                );
-            }
-        };
-        
+        // Cria o arquivo com cabeçalho se não existir; senão, adiciona nova linha
+        if (!fs.existsSync(filePath)) {
+            fs.writeFileSync(filePath, header + newLine, { encoding: 'utf8' });
+        } else {
+            fs.appendFileSync(filePath, newLine, { encoding: 'utf8' });
+        }
+        console.log('Arquivo CSV salvo com sucesso!');
+        uploadFileToDrive();
     } catch (err) {
         console.error('Erro ao salvar no CSV:', err.message);
         client.sendMessage(
@@ -143,12 +150,12 @@ const saveToCSV = (data) => {
 
 // Funil
 client.on('message', async msg => {
-    console.log(`Mensagem recebida de ${msg.from}: ${msg.body}`); // Log detalhado da mensagem recebida
+    console.log(`Mensagem recebida de ${msg.from}: ${msg.body}`);
     const chat = await msg.getChat();
 
     // Menu inicial
     if (msg.body.match(/(menu|Menu|início|Inicio|Oi|oi|Olá|olá|ola|Ola)/i)) {
-        clientStates.delete(msg.from); // Reseta o estado do cliente
+        clientStates.delete(msg.from);
         await delay(3000);
         await chat.sendStateTyping();
         await delay(3000);
@@ -185,7 +192,6 @@ client.on('message', async msg => {
             '📋 **Mapeamento de Fachadas**: Avaliação detalhada para identificar problemas e planejar manutenções preventivas ou corretivas.\n\n' +
             'Para mais detalhes sobre nossos serviços, visite: https://statusserv.com.br/servicos/'
         );
-
         await client.sendMessage(msg.from, 'Para voltar ao menu inicial, digite *menu*.');
         return;
     }
@@ -193,7 +199,7 @@ client.on('message', async msg => {
     // Controle de estados
     const state = clientStates.get(msg.from);
     if (state) {
-        console.log(`Estado atual para ${msg.from}:`, state); // Log do estado atual do cliente
+        console.log(`Estado atual para ${msg.from}:`, state);
         switch (state.state) {
             case 'awaiting_project':
                 state.project = msg.body;
@@ -224,10 +230,9 @@ client.on('message', async msg => {
                 state.email = msg.body;
                 saveToCSV(state);
                 await client.sendMessage(msg.from, 'Obrigado! Suas informações foram enviadas para nosso setor de orçamentos. Em breve, um responsável entrará em contato.');
-
                 // Notificação ao administrador
                 await client.sendMessage(
-                    '551140150044@c.us',
+                    adminNumber,
                     `📢 *Nova Solicitação de Orçamento!*\n\n` +
                     `📝 *Projeto*: ${state.project}\n` +
                     `📍 *Rua*: ${state.street}\n` +
@@ -257,7 +262,7 @@ client.on('message', async msg => {
             '✅ *Solicitação registrada!* Estamos avisando um responsável para falar com você. Por favor, aguarde um momento.'
         );
         await client.sendMessage(
-            '551140150044@c.us',
+            adminNumber,
             `📢 *Nova Solicitação!*\n\n👤 Um cliente deseja falar com um responsável.\n` +
             `📱 *Número do Cliente*: ${msg.from}\n\n` +
             `🚀 Por favor, entre em contato o mais breve possível!`
