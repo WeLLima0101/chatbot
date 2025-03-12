@@ -15,6 +15,14 @@ if (!fs.existsSync(publicDir)) {
     fs.mkdirSync(publicDir);
 }
 
+// === CRIA PASTA "data" PARA O CSV ===
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+// Caminho completo do CSV
+const filePath = path.join(dataDir, 'solicitacoes.csv');
+
 // Cliente com armazenamento local para manter a sessão
 const client = new Client({
     authStrategy: new LocalAuth({
@@ -32,7 +40,7 @@ let isClientInitialized = false; // Variável para evitar inicializações repet
 const sessionPath = './.wwebjs_auth/session-client-one/Default';
 if (fs.existsSync(sessionPath)) {
     try {
-        fs.rmdirSync(sessionPath, { recursive: true }); // Remove arquivos bloqueados
+        fs.rmdirSync(sessionPath, { recursive: true });
         console.log('Sessão antiga removida com sucesso.');
     } catch (err) {
         console.error('Erro ao remover a sessão antiga:', err.message);
@@ -96,15 +104,14 @@ const adminNumber = '551140150044@c.us';
 
 // Configuração do Google Drive
 const auth = new google.auth.GoogleAuth({
-    keyFile: 'credentials.json',
+    keyFile: 'credentials.json',  // Certifique-se de que está no local correto
     scopes: ['https://www.googleapis.com/auth/drive']
 });
 const drive = google.drive({ version: 'v3', auth });
 
+// Função para enviar o CSV ao Google Drive
 const uploadFileToDrive = async () => {
-    const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
-    const folderId = '1Q55EziaXR-Q9Raq1e7lfdC5I7-mkYSgs'; // Substitua pelo ID da sua pasta no Google Drive
-
+    const folderId = '1Q55EziaXR-Q9Raq1e7lfdC5I7-mkYSgs'; // ID da pasta no Google Drive
     try {
         const response = await drive.files.create({
             requestBody: {
@@ -114,7 +121,7 @@ const uploadFileToDrive = async () => {
             },
             media: {
                 mimeType: 'text/csv',
-                body: fs.createReadStream(filePath)
+                body: fs.createReadStream(filePath) // USANDO O MESMO filePath
             }
         });
         console.log('✅ Arquivo enviado para o Google Drive:', response.data.id);
@@ -125,7 +132,6 @@ const uploadFileToDrive = async () => {
 
 // Função para salvar dados no arquivo CSV e enviá-lo para o Google Drive
 const saveToCSV = (data) => {
-    const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
     try {
         console.log(`Tentando salvar os dados no CSV no caminho: ${filePath}`);
         const header = 'Projeto;Rua;Número;Bairro;Cidade;Email;Data/Hora\n';
@@ -133,9 +139,9 @@ const saveToCSV = (data) => {
 
         // Cria o arquivo com cabeçalho se não existir; senão, adiciona nova linha
         if (!fs.existsSync(filePath)) {
-            fs.writeFileSync(filePath, header + newLine, { encoding: 'utf8' });
+            fs.writeFileSync(filePath, header + newLine, 'utf8');
         } else {
-            fs.appendFileSync(filePath, newLine, { encoding: 'utf8' });
+            fs.appendFileSync(filePath, newLine, 'utf8');
         }
         console.log('Arquivo CSV salvo com sucesso!');
         uploadFileToDrive();
@@ -309,7 +315,7 @@ app.get('/qrcode.png', (req, res) => {
 
 // Rota para baixar o arquivo CSV
 app.get('/download-csv', (req, res) => {
-    const filePath = 'C:\\Users\\usuario07\\Desktop\\chatbot\\solicitacoes.csv';
+    // Usa o mesmo filePath relativo
     res.download(filePath, 'solicitacoes.csv', (err) => {
         if (err) {
             console.error('Erro ao enviar o arquivo CSV para download:', err.message);
