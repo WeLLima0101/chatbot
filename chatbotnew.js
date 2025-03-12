@@ -9,19 +9,29 @@ const { google } = require('googleapis');
 const app = express();
 const port = process.env.PORT || 10000;
 
+// === LOGS DE DEBUG INICIAIS ===
+console.log('[DEBUG] __dirname:', __dirname);
+
 // Certifique-se de que o diretório 'public' existe
 const publicDir = path.join(__dirname, 'public');
 if (!fs.existsSync(publicDir)) {
     fs.mkdirSync(publicDir);
+    console.log('[DEBUG] Criou pasta public:', publicDir);
+} else {
+    console.log('[DEBUG] Pasta public já existe:', publicDir);
 }
 
 // === CRIA PASTA "data" PARA O CSV ===
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+    console.log('[DEBUG] Criou pasta data:', dataDir);
+} else {
+    console.log('[DEBUG] Pasta data já existe:', dataDir);
 }
 // Caminho completo do CSV
 const filePath = path.join(dataDir, 'solicitacoes.csv');
+console.log('[DEBUG] filePath definido como:', filePath);
 
 // Cliente com armazenamento local para manter a sessão
 const client = new Client({
@@ -104,7 +114,8 @@ const adminNumber = '551140150044@c.us';
 
 // Configuração do Google Drive
 const auth = new google.auth.GoogleAuth({
-    keyFile: 'credentials.json',  // Certifique-se de que está no local correto
+    // Se usar path.join, substitua aqui também se preferir:
+    keyFile: path.join(__dirname, 'credentials.json'),
     scopes: ['https://www.googleapis.com/auth/drive']
 });
 const drive = google.drive({ version: 'v3', auth });
@@ -113,6 +124,9 @@ const drive = google.drive({ version: 'v3', auth });
 const uploadFileToDrive = async () => {
     const folderId = '1Q55EziaXR-Q9Raq1e7lfdC5I7-mkYSgs'; // ID da pasta no Google Drive
     try {
+        console.log('[DEBUG] Tentando fazer upload do arquivo:', filePath);
+        console.log('[DEBUG] Listando arquivos em dataDir antes do upload:', fs.readdirSync(dataDir));
+
         const response = await drive.files.create({
             requestBody: {
                 name: 'solicitacoes.csv',
@@ -133,18 +147,28 @@ const uploadFileToDrive = async () => {
 // Função para salvar dados no arquivo CSV e enviá-lo para o Google Drive
 const saveToCSV = (data) => {
     try {
-        console.log(`Tentando salvar os dados no CSV no caminho: ${filePath}`);
+        console.log('[DEBUG] Entrou em saveToCSV. Dados recebidos:', data);
+        console.log('[DEBUG] Tentando salvar CSV em:', filePath);
+        console.log('[DEBUG] Conteúdo de dataDir antes de escrever:', fs.readdirSync(dataDir));
+
         const header = 'Projeto;Rua;Número;Bairro;Cidade;Email;Data/Hora\n';
         const newLine = `${data.project};${data.street};${data.number};${data.neighborhood};${data.city};${data.email};${new Date().toLocaleString()}\n`;
 
         // Cria o arquivo com cabeçalho se não existir; senão, adiciona nova linha
         if (!fs.existsSync(filePath)) {
             fs.writeFileSync(filePath, header + newLine, 'utf8');
+            console.log('[DEBUG] CSV não existia, criando novo arquivo com cabeçalho...');
         } else {
             fs.appendFileSync(filePath, newLine, 'utf8');
+            console.log('[DEBUG] CSV já existia, adicionando nova linha...');
         }
-        console.log('Arquivo CSV salvo com sucesso!');
+
+        console.log('[DEBUG] Arquivo CSV salvo com sucesso!');
+        console.log('[DEBUG] Conteúdo de dataDir após escrever:', fs.readdirSync(dataDir));
+
+        // Chama o upload para o Drive
         uploadFileToDrive();
+
     } catch (err) {
         console.error('Erro ao salvar no CSV:', err.message);
         client.sendMessage(
@@ -315,7 +339,7 @@ app.get('/qrcode.png', (req, res) => {
 
 // Rota para baixar o arquivo CSV
 app.get('/download-csv', (req, res) => {
-    // Usa o mesmo filePath relativo
+    console.log('[DEBUG] Rota /download-csv chamada. filePath:', filePath);
     res.download(filePath, 'solicitacoes.csv', (err) => {
         if (err) {
             console.error('Erro ao enviar o arquivo CSV para download:', err.message);
