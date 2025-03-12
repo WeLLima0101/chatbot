@@ -113,11 +113,12 @@ const clientStates = new Map();
 const adminNumber = '551140150044@c.us';
 
 // Configuração do Google Drive
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 const auth = new google.auth.GoogleAuth({
-    // Se usar path.join, substitua aqui também se preferir:
-    keyFile: path.join(__dirname, 'credentials.json'),
-    scopes: ['https://www.googleapis.com/auth/drive']
+  credentials,
+  scopes: ['https://www.googleapis.com/auth/drive']
 });
+
 const drive = google.drive({ version: 'v3', auth });
 
 // Função para enviar o CSV ao Google Drive
