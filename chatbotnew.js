@@ -1,18 +1,27 @@
+const express = require('express');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
-const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const axios = require('axios');
 
+// ======================================================
+// 1) Configurações Iniciais de Express + Variáveis de Ambiente
+// ======================================================
 const app = express();
-const port = process.env.PORT || 10000;
+app.use(express.json()); // Para receber JSON no body
 
-// === LOGS DE DEBUG INICIAIS ===
+const port = process.env.PORT || 3000;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || '0009991100';
+
+// ======================================================
+// 2) Logs Iniciais e Criação de Pastas
+// ======================================================
 console.log('[DEBUG] __dirname:', __dirname);
 
-// Certifique-se de que o diretório 'public' existe
+// Cria a pasta "public" (usada para salvar o QR Code, se necessário)
 const publicDir = path.join(__dirname, 'public');
 if (!fs.existsSync(publicDir)) {
     fs.mkdirSync(publicDir);
@@ -21,7 +30,7 @@ if (!fs.existsSync(publicDir)) {
     console.log('[DEBUG] Pasta public já existe:', publicDir);
 }
 
-// === CRIA PASTA "data" PARA O CSV ===
+// Cria a pasta "data" para o CSV
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -29,24 +38,27 @@ if (!fs.existsSync(dataDir)) {
 } else {
     console.log('[DEBUG] Pasta data já existe:', dataDir);
 }
+
 // Caminho completo do CSV
 const filePath = path.join(dataDir, 'solicitacoes.csv');
 console.log('[DEBUG] filePath definido como:', filePath);
 
-// Cliente com armazenamento local para manter a sessão
+// ======================================================
+// 3) Configuração do whatsapp-web.js
+// ======================================================
 const client = new Client({
     authStrategy: new LocalAuth({
-        clientId: "client-one", // Identificador para múltiplas sessões
+        clientId: "client-one"
     }),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'], // Evita problemas de permissões
-    },
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
 });
 
-let isClientInitialized = false; // Variável para evitar inicializações repetidas
+let isClientInitialized = false;
 
-// Verificação inicial do diretório de sessão
+// Remove sessão antiga, se existir
 const sessionPath = './.wwebjs_auth/session-client-one/Default';
 if (fs.existsSync(sessionPath)) {
     try {
@@ -57,26 +69,24 @@ if (fs.existsSync(sessionPath)) {
     }
 }
 
-// Gerar QR Code quando necessário
+// Gera QR Code para autenticação
 client.on('qr', (qr) => {
     if (!isClientInitialized) {
         console.log('QR Code gerado! Escaneie o código abaixo para autenticar:');
         qrcode.generate(qr, { small: true });
-
-        // Salvar o QR Code como arquivo de imagem PNG
         QRCode.toFile(path.join(publicDir, 'qrcode.png'), qr, (err) => {
             if (err) {
                 console.error('Erro ao salvar o QR Code:', err);
             } else {
-                console.log('QR Code salvo como "qrcode.png". Acesse o servidor para escanear.');
+                console.log('QR Code salvo como "qrcode.png".');
             }
         });
     }
 });
 
-// Notificação de que a sessão foi iniciada
+// Quando o cliente estiver pronto
 client.on('ready', () => {
-    console.log('Tudo certo! WhatsApp conectado.');
+    console.log('Tudo certo! WhatsApp conectado (whatsapp-web.js).');
     isClientInitialized = true;
 });
 
@@ -100,34 +110,24 @@ client.on('disconnected', (reason) => {
     });
 });
 
-// Inicializa o cliente
+// Inicializa o cliente whatsapp-web.js
 client.initialize();
 
-// Delay para simular tempo de digitação
-const delay = ms => new Promise(res => setTimeout(res, ms));
-
-// Estados para armazenar as respostas dos clientes
-const clientStates = new Map();
-
-// Número do administrador (substitua pelo número correto no formato internacional)
-const adminNumber = '551140150044@c.us';
-
-// Configuração do Google Drive
-const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-const auth = new google.auth.GoogleAuth({
-  credentials,
+// ======================================================
+// 4) Configuração do CSV + Google Drive
+// ======================================================
+const driveCredentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || '{}');
+const authGoogle = new google.auth.GoogleAuth({
+  credentials: driveCredentials,
   scopes: ['https://www.googleapis.com/auth/drive']
 });
+const drive = google.drive({ version: 'v3', auth: authGoogle });
 
-const drive = google.drive({ version: 'v3', auth });
+const folderId = '1Q55EziaXR-Q9Raq1e7lfdC5I7-mkYSgs'; // Ajuste para sua pasta no Drive
 
-// Função para enviar o CSV ao Google Drive
-const uploadFileToDrive = async () => {
-    const folderId = '1Q55EziaXR-Q9Raq1e7lfdC5I7-mkYSgs'; // ID da pasta no Google Drive
+async function uploadFileToDrive() {
     try {
         console.log('[DEBUG] Tentando fazer upload do arquivo:', filePath);
-        console.log('[DEBUG] Listando arquivos em dataDir antes do upload:', fs.readdirSync(dataDir));
-
         const response = await drive.files.create({
             requestBody: {
                 name: 'solicitacoes.csv',
@@ -136,26 +136,20 @@ const uploadFileToDrive = async () => {
             },
             media: {
                 mimeType: 'text/csv',
-                body: fs.createReadStream(filePath) // USANDO O MESMO filePath
+                body: fs.createReadStream(filePath)
             }
         });
         console.log('✅ Arquivo enviado para o Google Drive:', response.data.id);
     } catch (error) {
         console.error('❌ Erro ao enviar para o Google Drive:', error.message);
     }
-};
+}
 
-// Função para salvar dados no arquivo CSV e enviá-lo para o Google Drive
-const saveToCSV = (data) => {
+function saveToCSV(data) {
     try {
         console.log('[DEBUG] Entrou em saveToCSV. Dados recebidos:', data);
-        console.log('[DEBUG] Tentando salvar CSV em:', filePath);
-        console.log('[DEBUG] Conteúdo de dataDir antes de escrever:', fs.readdirSync(dataDir));
-
         const header = 'Projeto;Rua;Número;Bairro;Cidade;Email;Data/Hora\n';
-        const newLine = `${data.project};${data.street};${data.number};${data.neighborhood};${data.city};${data.email};${new Date().toLocaleString()}\n`;
-
-        // Cria o arquivo com cabeçalho se não existir; senão, adiciona nova linha
+        const newLine = `${data.project};${data.street || ''};${data.number || ''};${data.neighborhood || ''};${data.city || ''};${data.email || ''};${new Date().toLocaleString()}\n`;
         if (!fs.existsSync(filePath)) {
             fs.writeFileSync(filePath, header + newLine, 'utf8');
             console.log('[DEBUG] CSV não existia, criando novo arquivo com cabeçalho...');
@@ -163,25 +157,52 @@ const saveToCSV = (data) => {
             fs.appendFileSync(filePath, newLine, 'utf8');
             console.log('[DEBUG] CSV já existia, adicionando nova linha...');
         }
-
-        console.log('[DEBUG] Arquivo CSV salvo com sucesso!');
-        console.log('[DEBUG] Conteúdo de dataDir após escrever:', fs.readdirSync(dataDir));
-
-        // Chama o upload para o Drive
         uploadFileToDrive();
-
     } catch (err) {
         console.error('Erro ao salvar no CSV:', err.message);
-        client.sendMessage(
-            adminNumber,
-            `⚠️ Erro ao salvar os dados no CSV: ${err.message}. Verifique o arquivo ou o código.`
-        );
+        // Se quiser notificar via whatsapp-web.js:
+        // client.sendMessage(adminNumber, `⚠️ Erro ao salvar os dados no CSV: ${err.message}`);
     }
-};
+}
 
-// Funil
+// ======================================================
+// 5) API Oficial do WhatsApp (Cloud API)
+const whatsappCloudApiToken = process.env.WHATSAPP_CLOUD_TOKEN || '';
+const phoneNumberId = process.env.PHONE_NUMBER_ID || '';
+
+async function sendOfficialMessage(messageText, recipientNumber) {
+    try {
+        if (!whatsappCloudApiToken || !phoneNumberId) {
+            console.error("❌ Token ou Phone Number ID não configurados!");
+            return;
+        }
+        const endpoint = `https://graph.facebook.com/v15.0/${phoneNumberId}/messages`;
+        console.log('[DEBUG] Enviando mensagem oficial via API para:', recipientNumber);
+        const response = await axios.post(endpoint, {
+            messaging_product: "whatsapp",
+            to: recipientNumber, // ex: '5511999998888'
+            type: "text",
+            text: { body: messageText }
+        }, {
+            headers: {
+                Authorization: `Bearer ${whatsappCloudApiToken}`,
+                "Content-Type": "application/json"
+            }
+        });
+        console.log("✅ Mensagem enviada via API oficial:", response.data);
+    } catch (error) {
+        console.error("❌ Erro ao enviar mensagem via API oficial:", error.response ? error.response.data : error.message);
+    }
+}
+
+// ======================================================
+// 6) Fluxo do Chatbot via whatsapp-web.js
+const clientStates = new Map();
+const adminNumber = '551140150044@c.us';
+
 client.on('message', async msg => {
     console.log(`Mensagem recebida de ${msg.from}: ${msg.body}`);
+    // Se quiser manipular a digitação:
     const chat = await msg.getChat();
 
     // Menu inicial
@@ -192,8 +213,7 @@ client.on('message', async msg => {
         await delay(3000);
         const contact = await msg.getContact();
         const name = contact.pushname;
-        await client.sendMessage(
-            msg.from,
+        await client.sendMessage(msg.from,
             `🌟 *Olá, ${name.split(' ')[0]}!* Seja muito bem-vindo(a) à *Status Serviços*! 🌟\n\n` +
             `Como posso ajudá-lo(a) hoje? Escolha uma das opções abaixo digitando o número correspondente:\n\n` +
             `1️⃣ - *Conhecer nossos serviços*\n` +
@@ -201,7 +221,8 @@ client.on('message', async msg => {
             `3️⃣ - *Falar com um atendente*\n` +
             `4️⃣ - *Nossos contatos*\n` +
             `5️⃣ - *Outras dúvidas*\n` +
-            `6️⃣ - *Encerrar conversa*\n\n` +
+            `6️⃣ - *Encerrar conversa*\n` +
+            `7️⃣ - *Enviar mensagem oficial de teste*\n\n` +
             `📌 *Dica*: Sempre que quiser voltar ao menu inicial, digite *menu*!`
         );
         return;
@@ -212,22 +233,29 @@ client.on('message', async msg => {
         await delay(3000);
         await chat.sendStateTyping();
         await delay(3000);
-        await client.sendMessage(
-            msg.from,
+        await client.sendMessage(msg.from,
             'Oferecemos uma variedade de serviços especializados para a conservação e manutenção de fachadas, incluindo:\n\n' +
-            '🧹 **Limpeza de Fachadas**: Remoção eficaz de sujeira e poluição, preservando a integridade e a estética do edifício.\n' +
-            '🎨 **Pintura Predial**: Revitalização da aparência das fachadas, contribuindo para a valorização do patrimônio imobiliário e proteção contra intempéries.\n' +
-            '🛠️ **Restauração de Fachadas**: Recuperação de estruturas danificadas, garantindo segurança e prolongando a vida útil do edifício.\n' +
-            '💧 **Impermeabilização de Fachadas**: Prevenção de infiltrações e deteriorações, aumentando a durabilidade da construção.\n' +
-            '🔧 **Vedação em Pele de Vidro**: Garantimos a vedação de fachadas com vidro para evitar infiltrações, preservar o isolamento térmico e proteger contra ruídos.\n\n' +
-            '📋 **Mapeamento de Fachadas**: Avaliação detalhada para identificar problemas e planejar manutenções preventivas ou corretivas.\n\n' +
+            '🧹 **Limpeza de Fachadas**\n' +
+            '🎨 **Pintura Predial**\n' +
+            '🛠️ **Restauração de Fachadas**\n' +
+            '💧 **Impermeabilização de Fachadas**\n' +
+            '🔧 **Vedação em Pele de Vidro**\n' +
+            '📋 **Mapeamento de Fachadas**\n\n' +
             'Para mais detalhes sobre nossos serviços, visite: https://statusserv.com.br/servicos/'
         );
         await client.sendMessage(msg.from, 'Para voltar ao menu inicial, digite *menu*.');
         return;
     }
 
-    // Controle de estados
+    // Comando especial: Enviar mensagem oficial de teste via API
+    if (msg.body === '7') {
+        // Substitua <DESTINATION_NUMBER> pelo número de destino no formato internacional, ex: '5511999998888'
+        await sendOfficialMessage("Olá! Esta é uma mensagem de teste enviada pela API oficial do WhatsApp.", "<DESTINATION_NUMBER>");
+        await client.sendMessage(msg.from, "Mensagem oficial de teste enviada.");
+        return;
+    }
+
+    // Fluxo de estados para solicitar orçamento
     const state = clientStates.get(msg.from);
     if (state) {
         console.log(`Estado atual para ${msg.from}:`, state);
@@ -279,14 +307,13 @@ client.on('message', async msg => {
         return;
     }
 
-    // Item 2: Solicitar orçamento
+    // Opções adicionais
     if (msg.body === '2') {
         clientStates.set(msg.from, { state: 'awaiting_project' });
         await client.sendMessage(msg.from, 'Por favor, descreva brevemente o projeto para o qual deseja solicitar orçamento.');
         return;
     }
 
-    // Item 3: Falar com um atendente
     if (msg.body === '3') {
         await client.sendMessage(
             msg.from,
@@ -301,7 +328,6 @@ client.on('message', async msg => {
         return;
     }
 
-    // Item 4: Nossos contatos
     if (msg.body === '4') {
         await client.sendMessage(
             msg.from,
@@ -310,7 +336,6 @@ client.on('message', async msg => {
         return;
     }
 
-    // Item 5: Outras dúvidas
     if (msg.body === '5') {
         await client.sendMessage(
             msg.from,
@@ -319,7 +344,6 @@ client.on('message', async msg => {
         return;
     }
 
-    // Item 6: Encerrar conversa
     if (msg.body === '6') {
         await client.sendMessage(
             msg.from,
@@ -330,31 +354,32 @@ client.on('message', async msg => {
     }
 });
 
-// Servir a imagem do QR Code
-app.use('/public', express.static(publicDir));
+// ======================================================
+// 7) Endpoints para Webhook da API Oficial (Cloud API)
+// Se quiser receber mensagens SEM depender do celular, configure:
 
-// Rota para acessar o QR Code
-app.get('/qrcode.png', (req, res) => {
-    res.sendFile(path.join(publicDir, 'qrcode.png'));
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  console.log('[DEBUG] GET /webhook chamado:', req.query);
+
+  if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('Webhook verificado com sucesso!');
+    return res.status(200).send(challenge);
+  }
+  res.sendStatus(403);
 });
 
-// Rota para baixar o arquivo CSV
-app.get('/download-csv', (req, res) => {
-    console.log('[DEBUG] Rota /download-csv chamada. filePath:', filePath);
-    res.download(filePath, 'solicitacoes.csv', (err) => {
-        if (err) {
-            console.error('Erro ao enviar o arquivo CSV para download:', err.message);
-            res.status(500).send('Erro ao enviar o arquivo CSV.');
-        }
-    });
+app.post('/webhook', async (req, res) => {
+  console.log('[DEBUG] POST /webhook - Notificação Cloud API:', JSON.stringify(req.body, null, 2));
+  // Se quiser processar mensagens vindas da Cloud API, faça aqui:
+  // ex: extrair sender e msgText e chamar sendOfficialMessage(...) para responder
+  res.sendStatus(200);
 });
 
-// Rota principal para status do servidor
-app.get('/', (req, res) => {
-    res.send('Servidor ativo! Acesse /qrcode.png para visualizar o QR Code.');
-});
-
-// Iniciar o servidor
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Servidor rodando em http://0.0.0.0:${port}`);
+// ======================================================
+// 8) Inicia o servidor Express
+app.listen(port, () => {
+  console.log(`Servidor rodando na porta ${port}`);
 });
