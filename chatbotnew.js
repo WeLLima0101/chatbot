@@ -344,10 +344,17 @@ app.post('/webhook', async (req, res) => {
 
   res.sendStatus(200);
 });
+// Adiciona a rota principal para verificar se o servidor está online
+app.get("/", (req, res) => {
+    res.status(200).send("Servidor online 🚀");
+});
 
-// -----------------------------------------------------
-// INICIA O SERVIDOR
-// -----------------------------------------------------
+// Adiciona a rota principal para verificar se o servidor está online
+app.get("/", (req, res) => {
+    res.status(200).send("Servidor online 🚀");
+});
+
+// INICIA O SERVIDOR (apenas uma vez!)
 app.listen(port, () => {
   console.log(`Servidor rodando na porta ${port}.`);
 });
