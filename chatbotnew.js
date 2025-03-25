@@ -3,7 +3,8 @@
  * - Recebe mensagens no POST /webhook
  * - Responde e envia mensagens com sendOfficialMessage
  * - Salva CSV e envia ao Google Drive
- * - Mesmo fluxo de "menu" e itens (1 a 7) sem whatsapp-web.js
+ * - Mesmo fluxo de "menu" e itens (1 a 6) sem whatsapp-web.js
+ * - Validação de e-mail e data em formato ISO
  ************************************************************/
 
 const express = require('express');
@@ -88,7 +89,7 @@ function saveToCSV(data) {
     try {
         console.log('[DEBUG] Salvando dados no CSV:', data);
         const header = 'Projeto;Rua;Número;Bairro;Cidade;Email;Data/Hora\n';
-        const newLine = `${data.project};${data.street || ''};${data.number || ''};${data.neighborhood || ''};${data.city || ''};${data.email || ''};${new Date().toLocaleString()}\n`;
+        const newLine = `${data.project};${data.street || ''};${data.number || ''};${data.neighborhood || ''};${data.city || ''};${data.email || ''};${data.timestamp}\n`;
         if (!fs.existsSync(filePath)) {
             fs.writeFileSync(filePath, header + newLine, 'utf8');
             console.log('[DEBUG] CSV criado com cabeçalho.');
@@ -105,7 +106,6 @@ function saveToCSV(data) {
 
 // -----------------------------------------------------
 // API OFICIAL DO WHATSAPP (Cloud API)
-// -----------------------------------------------------
 async function sendOfficialMessage(messageText, recipientNumber) {
     if (!WHATSAPP_CLOUD_TOKEN || !PHONE_NUMBER_ID) {
         console.error("❌ Token ou Phone Number ID não configurados!");
@@ -132,67 +132,25 @@ async function sendOfficialMessage(messageText, recipientNumber) {
 }
 
 // -----------------------------------------------------
-// FLUXO DO CHATBOT (Mesmo fluxo, mas sem whatsapp-web.js)
-// Precisamos processar as mensagens no POST /webhook
-// e usar 'sendOfficialMessage' para responder.
+// FUNÇÃO PARA VALIDAR E-MAIL (Regex simples)
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// -----------------------------------------------------
+// FLUXO DO CHATBOT (Itens 1 a 6)
 // -----------------------------------------------------
 
 // Armazenar estados (projeto, rua, etc.) por cada remetente
 const clientStates = new Map();
 
-// Delay "fake" se quiser simular digitação (opcional)
+// Delay "fake" para simulação de digitação (opcional)
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
-// Função que processa a mensagem recebida
 async function processIncomingMessage(sender, msgBody) {
     console.log(`[DEBUG] processIncomingMessage de ${sender}: ${msgBody}`);
 
-    // Menu inicial
-    if (msgBody.match(/(menu|Menu|início|Inicio|Oi|oi|Olá|olá|ola|Ola)/i)) {
-        clientStates.delete(sender);
-        await delay(3000);
-        await sendOfficialMessage(`🌟 *Olá!* Seja muito bem-vindo(a) à *Status Serviços*!\n\n` +
-            `Como posso ajudá-lo(a) hoje? Escolha uma das opções abaixo:\n\n` +
-            `1️⃣ - *Conhecer nossos serviços*\n` +
-            `2️⃣ - *Solicitar orçamento*\n` +
-            `3️⃣ - *Falar com um atendente*\n` +
-            `4️⃣ - *Nossos contatos*\n` +
-            `5️⃣ - *Outras dúvidas*\n` +
-            `6️⃣ - *Encerrar conversa*\n` +
-            `7️⃣ - *Enviar mensagem oficial de teste*\n\n` +
-            `📌 *Dica*: Sempre que quiser voltar ao menu inicial, digite *menu*!`,
-            sender
-        );
-        return;
-    }
-
-    // Item 1: Conhecer nossos serviços
-    if (msgBody === '1') {
-        await delay(3000);
-        await sendOfficialMessage(
-            'Oferecemos uma variedade de serviços especializados para a conservação e manutenção de fachadas, incluindo:\n\n' +
-            '🧹 **Limpeza de Fachadas**\n' +
-            '🎨 **Pintura Predial**\n' +
-            '🛠️ **Restauração de Fachadas**\n' +
-            '💧 **Impermeabilização de Fachadas**\n' +
-            '🔧 **Vedação em Pele de Vidro**\n' +
-            '📋 **Mapeamento de Fachadas**\n\n' +
-            'Para mais detalhes sobre nossos serviços, visite: https://statusserv.com.br/servicos/\n' +
-            'Para voltar ao menu inicial, digite *menu*.',
-            sender
-        );
-        return;
-    }
-
-    // Comando especial: Enviar mensagem oficial de teste via API
-    if (msgBody === '7') {
-        // Substitua <DESTINATION_NUMBER> se quiser mandar a outro número
-        await sendOfficialMessage("Olá! Esta é uma mensagem de teste enviada pela API oficial do WhatsApp.", sender);
-        await sendOfficialMessage("Mensagem oficial de teste enviada.", sender);
-        return;
-    }
-
-    // Verifica se está no fluxo de orçamento
+    // Prioriza o fluxo de coleta se já existe um estado ativo
     const state = clientStates.get(sender);
     if (state) {
         switch (state.state) {
@@ -222,10 +180,14 @@ async function processIncomingMessage(sender, msgBody) {
                 await sendOfficialMessage('Agora, por favor, informe um e-mail para contato e envio do orçamento.', sender);
                 break;
             case 'awaiting_email':
+                if (!isValidEmail(msgBody)) {
+                    await sendOfficialMessage('O e-mail informado não parece válido. Por favor, digite um e-mail correto.', sender);
+                    return;
+                }
                 state.email = msgBody;
+                state.timestamp = new Date().toISOString();
                 saveToCSV(state);
                 await sendOfficialMessage('Obrigado! Suas informações foram enviadas para nosso setor de orçamentos. Em breve, um responsável entrará em contato.', sender);
-                // Notifica admin
                 await sendOfficialMessage(
                     `📢 *Nova Solicitação de Orçamento!*\n\n` +
                     `📝 *Projeto*: ${state.project}\n` +
@@ -233,13 +195,53 @@ async function processIncomingMessage(sender, msgBody) {
                     `🔢 *Número*: ${state.number}\n` +
                     `🏘️ *Bairro*: ${state.neighborhood}\n` +
                     `🌆 *Cidade*: ${state.city}\n` +
-                    `📧 *E-mail*: ${state.email}\n\n` +
+                    `📧 *E-mail*: ${state.email}\n` +
+                    `🕒 *Data/Hora*: ${state.timestamp}\n\n` +
                     `🚀 Por favor, entre em contato com o cliente para fornecer mais detalhes ou confirmar o orçamento!`,
                     ADMIN_NUMBER
                 );
                 clientStates.delete(sender);
                 break;
         }
+        return;
+    }
+
+    // Se não há estado, verificamos se o usuário quer retornar ao menu
+    if (msgBody.match(/(menu|Menu|início|Inicio|Oi|oi|Olá|olá|ola|Ola)/i)) {
+        clientStates.delete(sender);
+        await delay(3000);
+        await sendOfficialMessage(
+            `🌟 *Olá!* Seja muito bem-vindo(a) à *Status Serviços*!\n\n` +
+            `Como posso ajudá-lo(a) hoje? Escolha uma das opções abaixo:\n\n` +
+            `1️⃣ - *Conhecer nossos serviços*\n` +
+            `2️⃣ - *Solicitar orçamento*\n` +
+            `3️⃣ - *Falar com um atendente*\n` +
+            `4️⃣ - *Nossos contatos*\n` +
+            `5️⃣ - *Outras dúvidas*\n` +
+            `6️⃣ - *Encerrar conversa*\n\n` +
+            `📌 *Dica*: Sempre que quiser voltar ao menu inicial, digite *menu*!`,
+            sender
+        );
+        return;
+    }
+
+    // Se não houver estado, processa comandos do menu
+
+    // Item 1: Conhecer nossos serviços (atualizado com informações completas)
+    if (msgBody === '1') {
+        await delay(3000);
+        await sendOfficialMessage(
+            `Oferecemos uma variedade de serviços especializados para a conservação e manutenção de fachadas, incluindo:\n\n` +
+            `🧹 **Limpeza de Fachadas**: Remoção eficaz de sujeira e poluição, preservando a integridade e a estética do edifício.\n\n` +
+            `🎨 **Pintura Predial**: Revitalização da aparência das fachadas, contribuindo para a valorização do patrimônio imobiliário e proteção contra intempéries.\n\n` +
+            `🛠️ **Restauração de Fachadas**: Recuperação de estruturas danificadas, garantindo segurança e prolongando a vida útil do edifício.\n\n` +
+            `💧 **Impermeabilização de Fachadas**: Prevenção de infiltrações e deteriorações, aumentando a durabilidade da construção.\n\n` +
+            `🔧 **Vedação em Pele de Vidro**: Garantimos a vedação de fachadas com vidro para evitar infiltrações, preservar o isolamento térmico e proteger contra ruídos.\n\n` +
+            `📋 **Mapeamento de Fachadas**: Avaliação detalhada para identificar problemas e planejar manutenções preventivas ou corretivas.\n\n` +
+            `Para mais detalhes sobre nossos serviços, visite: https://statusserv.com.br/servicos/\n` +
+            `Para voltar ao menu inicial, digite *menu*.`,
+            sender
+        );
         return;
     }
 
@@ -344,17 +346,15 @@ app.post('/webhook', async (req, res) => {
 
   res.sendStatus(200);
 });
-// Adiciona a rota principal para verificar se o servidor está online
+
+// Rota principal para verificar se o servidor está online
 app.get("/", (req, res) => {
     res.status(200).send("Servidor online 🚀");
 });
 
-// Adiciona a rota principal para verificar se o servidor está online
-app.get("/", (req, res) => {
-    res.status(200).send("Servidor online 🚀");
-});
-
-// INICIA O SERVIDOR (apenas uma vez!)
+// -----------------------------------------------------
+// INICIA O SERVIDOR
+// -----------------------------------------------------
 app.listen(port, () => {
   console.log(`Servidor rodando na porta ${port}.`);
 });
