@@ -34,47 +34,32 @@ const ADMIN_NUMBER = process.env.ADMIN_NUMBER || '551140150044@c.us';
 // Lê variáveis de ambiente relacionadas ao banco. Caso utilize a
 // conexão via socket (INSTANCE_CONNECTION_NAME), não é necessário
 // definir DB_HOST ou DB_PORT. Caso contrário, defina DB_HOST e DB_PORT.
+const { Pool } = require('pg');
+
 const {
   DB_HOST,
   DB_PORT,
   DB_USER,
   DB_PASSWORD,
   DB_NAME,
-  INSTANCE_CONNECTION_NAME
 } = process.env;
 
-// Determina se vamos usar um socket Unix (/cloudsql/{INSTANCE_CONNECTION_NAME})
-// ou um host/porta tradicionais. O Cloud SQL Proxy ou Cloud Run montam o
-// socket em /cloudsql.
-const useSocket = Boolean(INSTANCE_CONNECTION_NAME);
+const pool = new Pool({
+  host: DB_HOST,
+  port: Number(DB_PORT) || 5432,
+  user: DB_USER,
+  password: DB_PASSWORD,
+  database: DB_NAME,
+  // ⚠️ IP público: ative SSL "relaxado" ou ajuste sua instância para exigir SSL
+  ssl: { rejectUnauthorized: false },
+});
 
-// Cria um pool de conexões para PostgreSQL. O pool gerencia múltiplas
-// conexões automaticamente, evitando a sobrecarga de criar uma nova
-// conexão a cada consulta.
-const pool = useSocket
-  ? new Pool({
-      user: DB_USER,
-      password: DB_PASSWORD,
-      database: DB_NAME,
-      host: `/cloudsql/${INSTANCE_CONNECTION_NAME}`,
-      port: DB_PORT ? Number(DB_PORT) : 5432,
-    })
-  : new Pool({
-      user: DB_USER,
-      password: DB_PASSWORD,
-      database: DB_NAME,
-      host: DB_HOST || '127.0.0.1',
-      port: DB_PORT ? Number(DB_PORT) : 5432,
-    });
-
-// Função para salvar dados no banco. Insere uma linha na tabela
-// "solicitacoes" com as informações coletadas do fluxo do chatbot.
 async function saveToDB(data) {
   try {
     await pool.query(
       `INSERT INTO solicitacoes
        (projeto, rua, numero, bairro, cidade, email, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [
         data.project,
         data.street || null,
@@ -83,13 +68,16 @@ async function saveToDB(data) {
         data.city || null,
         data.email || null,
         new Date(data.timestamp),
-      ],
+      ]
     );
     console.log('✅ Registro salvo no banco.');
   } catch (err) {
     console.error('❌ Erro ao salvar no banco:', err.message);
   }
 }
+
+module.exports = { saveToDB };
+
 
 // -----------------------------------------------------
 // LOGS E PASTAS
